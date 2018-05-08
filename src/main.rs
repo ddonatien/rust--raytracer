@@ -207,7 +207,7 @@ fn main() {
 
                 let mut p_light = Vector {x: 0.0, y: 0.0, z: 0.0};
                 let mut n_light = Vector {x: 0.0, y: 0.0, z: 0.0};
-                let light_ray = Ray { orig: p.clone(), dest: (position_lumiere.clone() -p.clone()).getNormalized() };
+                let light_ray = Ray { orig: p.clone() + n.clone()*0.01, dest: (position_lumiere.clone() -p.clone()).getNormalized() };
                 let mut id_light: usize = 0;
                 let mut t_light: f32 = 1e99;
                 let d_light: f32 = (position_lumiere.clone() - p.clone()).getNorm2();
