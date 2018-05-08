@@ -1,0 +1,6 @@
+[package]
+name = "ray_tracer"
+version = "0.1.0"
+authors = ["Donatien <donatien@odena.eu>"]
+
+[dependencies]
