@@ -13,19 +13,25 @@ struct Vector {
     z: f32,
 }
 
+#[derive(Debug)]
 struct Ray {
     orig: Vector,
     dest: Vector,
 }
 
+#[derive(Debug)]
 struct Sphere {
     orig: Vector,
     radius: f32,
     albedo: Vector,
+    miroir: bool,
+    transp: bool,
 }
 
 struct Scene {
     spheres: Vec<Sphere>,
+    position_lumiere: Vector,
+    intensite_lumiere: f32,
 }
 
 impl Add for Vector {
@@ -73,18 +79,18 @@ impl Vector {
         self.x*other.x + self.y*other.y + self.z*other.z
     }
 
-    fn getNorm2(&self) -> f32 {
+    fn get_norm2(&self) -> f32 {
         self.dot(&self)
     }
 
     fn normalize(&mut self) {
-        let norm = (self.getNorm2() as f64).sqrt() as f32;
+        let norm = (self.get_norm2() as f64).sqrt() as f32;
         self.x /= norm;
         self.y /= norm;
         self.z /= norm;
     }
 
-    fn getNormalized(&mut self) -> Vector {
+    fn get_normalized(&mut self) -> Vector {
         let mut clone: Vector = self.clone();
         clone.normalize();
         clone
@@ -93,13 +99,13 @@ impl Vector {
 
 impl Sphere {
 
-    fn intersection(&self, r: &Ray, P: &mut Vector, N: &mut Vector, t: &mut f32) -> bool {
+    fn intersection(&self, r: &Ray, p: &mut Vector, n: &mut Vector, t: &mut f32) -> bool {
         // résoud a*t^2 + b*t + c = 0
 
         let diff: Vector = r.orig.clone() - self.orig.clone();
         let a: f32 = 1.0;
         let b: f32 = 2.0 * r.dest.clone().dot(&diff);
-        let c: f32 = diff.getNorm2() - self.radius*self.radius;
+        let c: f32 = diff.get_norm2() - self.radius*self.radius;
 
         let delta: f32 = b*b - 4.0*a*c;
         if delta < 0f32 {
@@ -116,14 +122,14 @@ impl Sphere {
                     *t = t2;
                 }
 
-                let p = r.orig.clone() + r.dest.clone()* *t;
-                P.x = p.x;
-                P.y = p.y;
-                P.z = p.z;
-                let normale = (p - self.orig.clone()).getNormalized();
-                N.x = normale.x;
-                N.y = normale.y;
-                N.z = normale.z;
+                let _p = r.orig.clone() + r.dest.clone()* *t;
+                p.x = _p.x;
+                p.y = _p.y;
+                p.z = _p.z;
+                let normale = (_p - self.orig.clone()).get_normalized();
+                n.x = normale.x;
+                n.y = normale.y;
+                n.z = normale.z;
                 true
             }
         }
@@ -134,13 +140,13 @@ impl Sphere {
 
 impl Scene {
 
-    fn addSphere(&mut self, sphere: Sphere) {
+    fn add_sphere(&mut self, sphere: Sphere) {
         self.spheres.push(sphere);
     }
 
-    fn intersection(&self, r: &Ray, P: &mut Vector, N: &mut Vector, sphere_id: &mut usize, min_t: &mut f32) -> bool {
+    fn intersection(&self, r: &Ray, p: &mut Vector, n: &mut Vector, sphere_id: &mut usize, min_t: &mut f32) -> bool {
         let mut has_inter: bool = false;
-        *min_t = 1e99;
+        *min_t = 1e10;
 
         for (i, s) in self.spheres.iter().enumerate() {
             let mut t: f32 = 0.0;
@@ -151,8 +157,8 @@ impl Scene {
                 has_inter = true;
                 if t < *min_t {
                     *min_t = t;
-                    *P = local_p.clone();
-                    *N = local_n.clone();
+                    *p = local_p.clone();
+                    *n = local_n.clone();
                     *sphere_id = i;
                 }
             }
@@ -164,78 +170,138 @@ impl Scene {
 }
 
 fn main() {
-    const x: i32 = 1920;
-    const y: i32 = 1080;
-    const fov: f32 = 100.0*PI/180.0;
+    const X: i32 = 1920;
+    const Y: i32 = 1080;
+    const FOV: f32 = 100.0*PI/180.0;
 
-    let mut image = vec![0u8; (x*y*3) as usize];
+    let mut image = vec![0u8; (X*Y*3) as usize];
     let position_lumiere = Vector { x: 15.0, y: 70.0, z: -30.0};
-    let intensite_lumiere = 10000.0;
+    let intensite_lumiere = 10000000.0;
 
-    let s1 = Sphere { orig: Vector { x: 0.0, y: 0.0, z: -55.0 }, radius: 20.0, albedo: Vector { x: 1.0, y: 0.0, z: 0.0 } };
-    let s2 = Sphere { orig: Vector { x: 0.0, y: -2020.0, z: 0.0 }, radius: 2000.0, albedo: Vector { x: 1.0, y: 1.0, z: 1.0 } }; // floor
-    let s3 = Sphere { orig: Vector { x: 0.0, y: 2100.0, z: 0.0 }, radius: 2000.0, albedo: Vector { x: 1.0, y: 1.0, z: 1.0 } }; // celling
-    let s4 = Sphere { orig: Vector { x: -2050.0, y: 0.0, z: 0.0 }, radius: 2000.0, albedo: Vector { x: 0.0, y: 1.0, z: 0.0 } }; // left wall
-    let s5 = Sphere { orig: Vector { x: 2050.0, y: 0.0, z: 0.0 }, radius: 2000.0, albedo: Vector { x: 0.0, y: 0.0, z: 1.0 } }; // right wall
-    let s6 = Sphere { orig: Vector { x: 0.0, y: 0.0, z: -2050.0 }, radius: 2000.0, albedo: Vector { x: 0.0, y: 1.0, z: 1.0 } }; // back wall
+    let s1 = Sphere { orig: Vector { x: -15.0, y: 0.0, z: -55.0 }, radius: 10.0, albedo: Vector { x: 1.0, y: 0.0, z: 1.0 }, miroir: false, transp: true };
+    let s1bis = Sphere { orig: Vector { x: 15.0, y: 0.0, z: -55.0 }, radius: 10.0, albedo: Vector { x: 1.0, y: 0.0, z: 0.0 }, miroir: true, transp: false };
+    let s2 = Sphere { orig: Vector { x: 0.0, y: -2020.0, z: 0.0 }, radius: 2000.0, albedo: Vector { x: 1.0, y: 1.0, z: 1.0 }, miroir: false, transp: false }; // floor
+    let s3 = Sphere { orig: Vector { x: 0.0, y: 2100.0, z: 0.0 }, radius: 2000.0, albedo: Vector { x: 1.0, y: 1.0, z: 1.0 }, miroir: false, transp: false }; // celling
+    let s4 = Sphere { orig: Vector { x: -2050.0, y: 0.0, z: 0.0 }, radius: 2000.0, albedo: Vector { x: 0.0, y: 1.0, z: 0.0 }, miroir: false, transp: false }; // left wall
+    let s5 = Sphere { orig: Vector { x: 2050.0, y: 0.0, z: 0.0 }, radius: 2000.0, albedo: Vector { x: 0.0, y: 0.0, z: 1.0 }, miroir: false, transp: false }; // right wall
+    let s6 = Sphere { orig: Vector { x: 0.0, y: 0.0, z: -2100.0 }, radius: 2000.0, albedo: Vector { x: 0.0, y: 1.0, z: 1.0 }, miroir: false, transp: false }; // back wall
 
-    let mut scene = Scene { spheres: Vec::new() };
-    scene.addSphere(s1);
-    scene.addSphere(s2);
-    scene.addSphere(s3);
-    scene.addSphere(s4);
-    scene.addSphere(s5);
-    scene.addSphere(s6);
+    let mut scene = Scene { spheres: Vec::new(), position_lumiere: position_lumiere, intensite_lumiere: intensite_lumiere };
+    scene.add_sphere(s1);
+    scene.add_sphere(s1bis);
+    scene.add_sphere(s2);
+    scene.add_sphere(s3);
+    scene.add_sphere(s4);
+    scene.add_sphere(s5);
+    scene.add_sphere(s6);
 
-    for i in 0..y {
-        for j in 0..x {
+    for i in 0..Y {
+        for j in 0..X {
             let mut direction = Vector {
-                x: j as f32 - x as f32/2.0,
-                y: i as f32 - y as f32/2.0,
-                z: -x as f32/(2.0*(fov/2.0).tan())
+                x: j as f32 - X as f32/2.0,
+                y: i as f32 - Y as f32/2.0,
+                z: -X as f32/(2.0*(FOV/2.0).tan())
             };
             direction.normalize();
             let r = Ray { orig: Vector { x: 0.0, y: 0.0, z: 0.0 }, dest: direction };
 
-            let mut p = Vector {x: 0.0, y: 0.0, z: 0.0};
-            let mut n = Vector {x: 0.0, y: 0.0, z: 0.0};
-            let mut intensite_pixel = Vector {x: 0.0, y: 0.0, z: 0.0};
-            let mut id: usize = 0;
-            let mut t: f32 = 1e99;
+            let color = get_color( &r, &scene, 5 );
 
-            if scene.intersection(&r, &mut p, &mut n, &mut id, &mut t) {
-
-                let mut p_light = Vector {x: 0.0, y: 0.0, z: 0.0};
-                let mut n_light = Vector {x: 0.0, y: 0.0, z: 0.0};
-                let light_ray = Ray { orig: p.clone() + n.clone()*0.01, dest: (position_lumiere.clone() -p.clone()).getNormalized() };
-                let mut id_light: usize = 0;
-                let mut t_light: f32 = 1e99;
-                let d_light: f32 = (position_lumiere.clone() - p.clone()).getNorm2();
-                if scene.intersection(&light_ray, &mut p_light, &mut n_light, &mut id_light, &mut t_light) && t_light*t_light < d_light {
-                    intensite_pixel.x = 0.0;
-                    intensite_pixel.y = 0.0;
-                    intensite_pixel.z = 0.0;
-                } else {
-
-                    let lum = intensite_lumiere * 0f32.max( (position_lumiere.clone() - p.clone()).dot(&n) / d_light );
-                    intensite_pixel.x = scene.spheres[id].albedo.x * lum;
-                    intensite_pixel.y = scene.spheres[id].albedo.y * lum;
-                    intensite_pixel.z = scene.spheres[id].albedo.z * lum;
-
-                }
-
-                image[((i*x +j)*3) as usize] = 255f32.min(0f32.max(intensite_pixel.x)) as u8;
-                image[((i*x +j)*3 + 1) as usize] = 255f32.min(0f32.max(intensite_pixel.y)) as u8;
-                image[((i*x +j)*3 + 2) as usize] = 255f32.min(0f32.max(intensite_pixel.z)) as u8;
-            } else {
-                image[((i*x +j)*3) as usize] = 0;
-                image[((i*x +j)*3 + 1) as usize] = 0;
-                image[((i*x +j)*3 + 2) as usize] = 0;
-            }
+            image[((i*X +j)*3) as usize] = 255f32.min(0f32.max((color.x).powf((1.0)/(2.2)))) as u8;
+            image[((i*X +j)*3 + 1) as usize] = 255f32.min(0f32.max((color.y).powf((1.0)/(2.2)))) as u8;
+            image[((i*X +j)*3 + 2) as usize] = 255f32.min(0f32.max((color.z).powf((1.0)/(2.2)))) as u8;
         }
     }
 
-    save_img("./image.bmp", &image, x as u32, y as u32);
+    save_img("./image.bmp", &image, X as u32, Y as u32);
+}
+
+fn get_color(r: &Ray, scene: &Scene, nbrebonds: u8) -> Vector {
+
+    if nbrebonds == 0 {
+        let intensite_pixel = Vector {x: 0.0, y: 0.0, z: 0.0};
+        intensite_pixel
+    } else {
+        let mut p = Vector {x: 0.0, y: 0.0, z: 0.0};
+        let mut n = Vector {x: 0.0, y: 0.0, z: 0.0};
+        let mut intensite_pixel = Vector {x: 0.0, y: 0.0, z: 0.0};
+        let mut id: usize = 0;
+        let mut t: f32 = 1e10;
+
+        if scene.intersection(&r, &mut p, &mut n, &mut id, &mut t) {
+
+            if scene.spheres[id].miroir {
+
+                let direction_miroir = r.dest.clone() - n.clone()*n.clone().dot(&r.dest.clone())*2.0;
+                let rayon_miroir = Ray { orig: p + n*0.001, dest: direction_miroir };
+                intensite_pixel = get_color( &rayon_miroir, &scene, nbrebonds -1 );
+
+            } else {
+
+                if scene.spheres[id].transp {
+
+                    let mut n1 = 0.0;
+                    let mut n2 = 0.0;
+                    let mut normale_pour_transparence = Vector { x: 0.0, y: 0.0, z: 0.0 };
+
+                    if r.dest.dot(&n) > 0.0 {
+
+                        n1 = 1.3;
+                        n2 = 1.0;
+                        normale_pour_transparence = Vector { x: 0.0, y: 0.0, z: 0.0 } - n.clone();
+
+                    } else {
+
+                        n1 = 1.0;
+                        n2 = 1.3;
+                        normale_pour_transparence = n.clone();
+
+                    }
+
+                    let lhs = (n1/n2)*(n1/n2);
+                    let rhs = 1.0 - normale_pour_transparence.clone().dot(&r.dest)*normale_pour_transparence.clone().dot(&r.dest);
+                    let radical = 1.0 - lhs*rhs;
+
+                    if radical > 0.0 {
+
+                        let direction_refracte = (r.dest.clone() - normale_pour_transparence.clone()*(r.dest.dot(&normale_pour_transparence.clone())))*(n1/n2) - normale_pour_transparence.clone()*((radical as f64).sqrt() as f32);
+                        let rayon_refracte = Ray { orig: p - normale_pour_transparence.clone()*0.001, dest: direction_refracte };
+                        intensite_pixel = get_color( &rayon_refracte, &scene, nbrebonds -1 );
+
+                    }
+
+                } else {
+
+                    let mut p_light = Vector {x: 0.0, y: 0.0, z: 0.0};
+                    let mut n_light = Vector {x: 0.0, y: 0.0, z: 0.0};
+                    let light_ray = Ray { orig: p.clone() + n.clone()*0.01, dest: (scene.position_lumiere.clone() -p.clone()).get_normalized() };
+                    let mut id_light: usize = 0;
+                    let mut t_light: f32 = 1e99;
+                    let d_light: f32 = (scene.position_lumiere.clone() - p.clone()).get_norm2();
+                    if scene.intersection(&light_ray, &mut p_light, &mut n_light, &mut id_light, &mut t_light) && t_light*t_light < d_light {
+                        intensite_pixel.x = 0.0;
+                        intensite_pixel.y = 0.0;
+                        intensite_pixel.z = 0.0;
+
+                    } else {
+
+                        let lum = scene.intensite_lumiere * 0f32.max((scene.position_lumiere.clone() - p.clone()).dot(&n) / d_light );
+                        intensite_pixel.x = scene.spheres[id].albedo.x * lum;
+                        intensite_pixel.y = scene.spheres[id].albedo.y * lum;
+                        intensite_pixel.z = scene.spheres[id].albedo.z * lum;
+
+                    }
+                }
+            }
+        } else {
+
+            intensite_pixel.x = 0.0;
+            intensite_pixel.y = 0.0;
+            intensite_pixel.z = 0.0;
+
+        }
+        intensite_pixel
+    }
 }
 
 #[allow(exceeding_bitshifts)]
