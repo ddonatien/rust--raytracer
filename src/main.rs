@@ -230,10 +230,12 @@ fn main() {
     let position_lumiere = Vector { x: 15.0, y: 70.0, z: -30.0};
     let intensite_lumiere = 10000000000.0;
     let position_camera = Vector::new();
+    let focus_distance = 55.0;
 
     let slum = Sphere { orig: position_lumiere, radius: 30.0, albedo: Vector { x: 1.0, y: 1.0, z: 1.0 }, miroir: false, transp: false };
-    let s1 = Sphere { orig: Vector { x: 0.0, y: 0.0, z: -55.0 }, radius: 20.0, albedo: Vector { x: 1.0, y: 0.0, z: 1.0 }, miroir: false, transp: false };
-    // let s1bis = Sphere { orig: Vector { x: 15.0, y: 0.0, z: -55.0 }, radius: 10.0, albedo: Vector { x: 1.0, y: 0.0, z: 0.0 }, miroir: false, transp: false };
+    let s1 = Sphere { orig: Vector { x: 0.0, y: 0.0, z: -55.0 }, radius: 10.0, albedo: Vector { x: 1.0, y: 0.0, z: 1.0 }, miroir: false, transp: false };
+    let s1bis = Sphere { orig: Vector { x: -15.0, y: 0.0, z: -35.0 }, radius: 10.0, albedo: Vector { x: 1.0, y: 0.0, z: 0.0 }, miroir: false, transp: true };
+    let s1ter = Sphere { orig: Vector { x: 15.0, y: 0.0, z: -75.0 }, radius: 10.0, albedo: Vector { x: 1.0, y: 0.0, z: 0.0 }, miroir: true, transp: false };
     let s2 = Sphere { orig: Vector { x: 0.0, y: -2020.0, z: 0.0 }, radius: 2000.0, albedo: Vector { x: 1.0, y: 1.0, z: 1.0 }, miroir: false, transp: false }; // floor
     let s3 = Sphere { orig: Vector { x: 0.0, y: 2100.0, z: 0.0 }, radius: 2000.0, albedo: Vector { x: 1.0, y: 1.0, z: 1.0 }, miroir: false, transp: false }; // celling
     let s4 = Sphere { orig: Vector { x: -2050.0, y: 0.0, z: 0.0 }, radius: 2000.0, albedo: Vector { x: 0.0, y: 1.0, z: 0.0 }, miroir: false, transp: false }; // left wall
@@ -243,7 +245,8 @@ fn main() {
     let mut scene = Scene { spheres: Vec::new(), lumiere: 0, intensite_lumiere: intensite_lumiere };
     scene.add_sphere(slum);
     scene.add_sphere(s1);
-    // scene.add_sphere(s1bis);
+    scene.add_sphere(s1bis);
+//    scene.add_sphere(s1ter);
     scene.add_sphere(s2);
     scene.add_sphere(s3);
     scene.add_sphere(s4);
@@ -275,7 +278,10 @@ fn main() {
                     z: -X as f32/(2.0*(FOV/2.0).tan())
                 };
                 direction.normalize();
-                let r = Ray { orig: position_camera, dest: direction };
+
+                let destination = position_camera.clone() + direction * focus_distance;
+                let new_origin = position_camera.clone() + Vector { x: dx_aperture, y: dy_aperture, z: 0.0};
+                let r = Ray { orig: new_origin.clone(), dest: (destination.clone() - new_origin.clone()).get_normalized() };
 
                 color += get_color( &r, &scene, 3 )/(NRAYS as f32);
             }
