@@ -122,6 +122,30 @@ impl Vector {
         clone.normalize();
         clone
     }
+
+    fn random_cos(&self) -> Vector {
+        // Contribution de l'éclairage indirect
+        let range = Range::new(0.0, 1.0);
+        let mut rng = rand::thread_rng();
+        let r1: f32 = range.ind_sample(&mut rng);
+        let r2: f32 = range.ind_sample(&mut rng);
+        let direction_aleatoire_repere_local = Vector {
+            x: (2.0*PI*r1).cos()*(((1.0-r2) as f64).sqrt() as f32),
+            y: (2.0*PI*r1).sin()*(((1.0-r2) as f64).sqrt() as f32),
+            z: (r2 as f64).sqrt() as f32,
+        };
+        let aleatoire = Vector {
+            x: range.ind_sample(&mut rng),
+            y: range.ind_sample(&mut rng),
+            z: range.ind_sample(&mut rng),
+        };
+        let tangent1 = self.clone().cross(&aleatoire);
+        let tangent2 = tangent1.cross(&self.clone());
+        let direction_aleatoire = self.clone()*direction_aleatoire_repere_local.z
+            + tangent1.clone()*direction_aleatoire_repere_local.x
+            + tangent2.clone()*direction_aleatoire_repere_local.y;
+        direction_aleatoire
+    }
 }
 
 impl Sphere {
@@ -199,16 +223,17 @@ impl Scene {
 fn main() {
     const X: i32 = 1920;
     const Y: i32 = 1080;
-    const NRAYS: u8 = 8000;
+    const NRAYS: u16 = 8;
     const FOV: f32 = 100.0*PI/180.0;
 
     let mut image = vec![0u8; (X*Y*3) as usize];
     let position_lumiere = Vector { x: 15.0, y: 70.0, z: -30.0};
-    let intensite_lumiere = 100000000.0;
+    let intensite_lumiere = 10000000000.0;
+    let position_camera = Vector::new();
 
-    let slum = Sphere { orig: position_lumiere, radius: 15.0, albedo: Vector { x: 1.0, y: 1.0, z: 1.0 }, miroir: false, transp: false };
-    let s1 = Sphere { orig: Vector { x: -15.0, y: 0.0, z: -55.0 }, radius: 10.0, albedo: Vector { x: 1.0, y: 0.0, z: 1.0 }, miroir: false, transp: false };
-    let s1bis = Sphere { orig: Vector { x: 15.0, y: 0.0, z: -55.0 }, radius: 10.0, albedo: Vector { x: 1.0, y: 0.0, z: 0.0 }, miroir: false, transp: false };
+    let slum = Sphere { orig: position_lumiere, radius: 30.0, albedo: Vector { x: 1.0, y: 1.0, z: 1.0 }, miroir: false, transp: false };
+    let s1 = Sphere { orig: Vector { x: 0.0, y: 0.0, z: -55.0 }, radius: 20.0, albedo: Vector { x: 1.0, y: 0.0, z: 1.0 }, miroir: false, transp: false };
+    // let s1bis = Sphere { orig: Vector { x: 15.0, y: 0.0, z: -55.0 }, radius: 10.0, albedo: Vector { x: 1.0, y: 0.0, z: 0.0 }, miroir: false, transp: false };
     let s2 = Sphere { orig: Vector { x: 0.0, y: -2020.0, z: 0.0 }, radius: 2000.0, albedo: Vector { x: 1.0, y: 1.0, z: 1.0 }, miroir: false, transp: false }; // floor
     let s3 = Sphere { orig: Vector { x: 0.0, y: 2100.0, z: 0.0 }, radius: 2000.0, albedo: Vector { x: 1.0, y: 1.0, z: 1.0 }, miroir: false, transp: false }; // celling
     let s4 = Sphere { orig: Vector { x: -2050.0, y: 0.0, z: 0.0 }, radius: 2000.0, albedo: Vector { x: 0.0, y: 1.0, z: 0.0 }, miroir: false, transp: false }; // left wall
@@ -218,7 +243,7 @@ fn main() {
     let mut scene = Scene { spheres: Vec::new(), lumiere: 0, intensite_lumiere: intensite_lumiere };
     scene.add_sphere(slum);
     scene.add_sphere(s1);
-    scene.add_sphere(s1bis);
+    // scene.add_sphere(s1bis);
     scene.add_sphere(s2);
     scene.add_sphere(s3);
     scene.add_sphere(s4);
@@ -241,15 +266,18 @@ fn main() {
                 let dx = r*(2.0*PI*r2).cos();
                 let dy = r*(2.0*PI*r2).sin();
 
+                let dx_aperture = (range.ind_sample(&mut rng) - 0.5) * 5.0;
+                let dy_aperture = (range.ind_sample(&mut rng) - 0.5) * 5.0;
+
                 let mut direction = Vector {
                     x: j as f32 - X as f32/2.0 + 0.5 + dx,
                     y: i as f32 - Y as f32/2.0 + 0.5 + dy,
                     z: -X as f32/(2.0*(FOV/2.0).tan())
                 };
                 direction.normalize();
-                let r = Ray { orig: Vector { x: 0.0, y: 0.0, z: 0.0 }, dest: direction };
+                let r = Ray { orig: position_camera, dest: direction };
 
-                color += get_color( &r, &scene, 5 )/(NRAYS as f32);
+                color += get_color( &r, &scene, 3 )/(NRAYS as f32);
             }
 
             image[((i*X +j)*3) as usize] = 255f32.min(0f32.max((color.x).powf((1.0)/(2.2)))) as u8;
@@ -263,10 +291,11 @@ fn main() {
 
 fn get_color(r: &Ray, scene: &Scene, nbrebonds: u8) -> Vector {
 
+    /*
     if nbrebonds == 0 {
         let intensite_pixel = Vector {x: 0.0, y: 0.0, z: 0.0};
         return intensite_pixel;
-    }
+    }*/
 
     let mut p = Vector {x: 0.0, y: 0.0, z: 0.0};
     let mut n = Vector {x: 0.0, y: 0.0, z: 0.0};
@@ -295,7 +324,7 @@ fn get_color(r: &Ray, scene: &Scene, nbrebonds: u8) -> Vector {
 
             let mut n1 = 0.0;
             let mut n2 = 0.0;
-            let mut normale_pour_transparence = Vector { x: 0.0, y: 0.0, z: 0.0 };
+            let mut normale_pour_transparence = Vector::new();
 
             if r.dest.dot(&n) > 0.0 {
 
@@ -355,32 +384,38 @@ fn get_color(r: &Ray, scene: &Scene, nbrebonds: u8) -> Vector {
         intensite_pixel.z = scene.spheres[id].albedo.z * lum / PI;
 
     }*/
+        let axe_op = (p.clone() - scene.spheres[scene.lumiere].orig.clone()).get_normalized();
+        let dir_aleatoire = axe_op.random_cos();
+        let point_aleatoire = dir_aleatoire.clone() * scene.spheres[scene.lumiere].radius + scene.spheres[scene.lumiere].orig.clone() ;
+        let wi = (point_aleatoire.clone() - p.clone()).get_normalized();
+        let d_light2 = (point_aleatoire.clone() - p.clone()).get_norm2();
+        let np = dir_aleatoire.clone();
+
+        let mut p_light = Vector::new();
+        let mut n_light = Vector::new();
+        let light_ray = Ray { orig: p.clone() + n.clone()*0.01, dest: wi.clone() };
+        let mut id_light: usize = 0;
+        let mut t_light: f32 = 1e10;
+
+        if scene.intersection(&light_ray, &mut p_light, &mut n_light, &mut id_light, &mut t_light) && t_light*t_light < d_light2*0.99 {
+
+            intensite_pixel = Vector::new();
+
+        } else {
+
+            intensite_pixel = scene.spheres[id].albedo.clone() * scene.intensite_lumiere / (4.0*PI*d_light2) * 0f32.max(n.clone().dot(&wi.clone())) * np.dot(&(Vector::new() - wi.clone())) / axe_op.dot(&dir_aleatoire);
+
+        }
+
 
         // Contribution de l'éclairage indirect
-        let range = Range::new(0.0, 1.0);
-        let mut rng = rand::thread_rng();
-        let r1: f32 = range.ind_sample(&mut rng);
-        let r2: f32 = range.ind_sample(&mut rng);
-        let direction_aleatoire_repere_local = Vector {
-            x: (2.0*PI*r1).cos()*(((1.0-r2) as f64).sqrt() as f32),
-            y: (2.0*PI*r1).sin()*(((1.0-r2) as f64).sqrt() as f32),
-            z: (r2 as f64).sqrt() as f32,
-        };
-        let aleatoire = Vector {
-            x: range.ind_sample(&mut rng),
-            y: range.ind_sample(&mut rng),
-            z: range.ind_sample(&mut rng),
-        };
-        let tangent1 = n.clone().cross(&aleatoire);
-        let tangent2 = tangent1.cross(&n.clone());
-        let direction_aleatoire = n.clone()*direction_aleatoire_repere_local.z
-            + tangent1.clone()*direction_aleatoire_repere_local.x
-            + tangent2.clone()*direction_aleatoire_repere_local.y;
+        let direction_aleatoire = n.random_cos();
         let rayon_aleatoire = Ray { orig: p + n*0.001, dest: direction_aleatoire };
         let albedo_local = scene.spheres[id].albedo.clone();
         let color = get_color( &rayon_aleatoire, &scene, nbrebonds -1 )*albedo_local;
         intensite_pixel += color;
-        return intensite_pixel
+        return intensite_pixel;
+
     } else {
 
         intensite_pixel.x = 0.0;
