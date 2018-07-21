@@ -4,9 +4,9 @@ Simple raytracer written in rust.
 
 
 # How to test
-`git clone https://github.com/ddonatien/rust--raytracer`
-`cd rust--raytracer`
-`cargo run`
+`git clone https://github.com/ddonatien/rust--raytracer`  
+`cd rust--raytracer`  
+`cargo run`  
 It will generate a bmp image of the scene.
 
 # How to modify the rendered scene
