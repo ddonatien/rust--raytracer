@@ -1,4 +1,5 @@
 extern crate rand;
+extern crate rayon;
 extern crate time;
 
 use std::fs::File;
@@ -8,6 +9,9 @@ use std::ops::AddAssign;
 use std::ops::Sub;
 use std::ops::Mul;
 use std::ops::Div;
+use std::sync::Arc;
+use std::sync::Mutex;
+use rayon::prelude::*;
 use std::f32::consts::PI;
 use rand::Rng;
 use rand::distributions::{IndependentSample, Range};
@@ -32,10 +36,6 @@ struct Sphere {
     albedo: Vector,
     miroir: bool,
     transp: bool,
-}
-
-struct Triangle {
-    
 }
 
 struct Scene {
@@ -230,7 +230,7 @@ fn main() {
     let time_start_min = time::now().tm_min;
     const X: i32 = 800;
     const Y: i32 = 800;
-    const NRAYS: u16 = 60;
+    const NRAYS: u16 = 600;
     const FOV: f32 = 60.0*PI/180.0;
 
     let mut image = vec![0u8; (X*Y*3) as usize];
@@ -261,22 +261,20 @@ fn main() {
     scene.add_sphere(s5);
     scene.add_sphere(s6);
     eprintln!("Création de la scène : {:?}", time::now().tm_sec - time_start);
+    let arc_image = Arc::new(Mutex::new(image));
 
     for i in 0..Y {
-        //let rows = std::ops::Range { start: 0, end: X };
-        //rows.into_iter()
-        //    .map(|j| fill_image(i, j, &scene, NRAYS, X, Y, FOV, &position_camera, focus_distance, &mut image));
-        for j in 0..X {
-            fill_image(i, j, &scene, NRAYS, X, Y, FOV, &position_camera, focus_distance, &mut image)
-        }
+            (0..X).into_par_iter()
+                .for_each(|j| fill_image(i, j, &scene, NRAYS, X, Y, FOV, &position_camera, focus_distance, Arc::clone(&arc_image)));
     }
+
     eprintln!("Fin du calcul de l'image {:?}", time::now().tm_min - time_start_min);
 
+    let image = arc_image.lock().unwrap();
     save_img("./image.bmp", &image, X as u32, Y as u32);
 }
 
-fn fill_image( i: i32, j: i32, scene: &Scene, n_rays: u16, x: i32, y: i32, fov: f32, position_camera: &Vector, focus_distance: f32, image: &mut [u8]) {
-
+fn fill_image( i: i32, j: i32, scene: &Scene, n_rays: u16, x: i32, y: i32, fov: f32, position_camera: &Vector, focus_distance: f32, image: Arc<Mutex<Vec<u8>>>) {
     let mut color = Vector::new();
     for n in 0..n_rays {
 
@@ -308,9 +306,12 @@ fn fill_image( i: i32, j: i32, scene: &Scene, n_rays: u16, x: i32, y: i32, fov: 
         color += get_color( &r, &scene, 5, true )/(n_rays as f32);
     }
 
-    image[((i*x + j)*3) as usize] = 255f32.min(0f32.max((color.x).powf((1.0)/(2.2)))) as u8;
-    image[((i*x + j)*3 + 1) as usize] = 255f32.min(0f32.max((color.y).powf((1.0)/(2.2)))) as u8;
-    image[((i*x + j)*3 + 2) as usize] = 255f32.min(0f32.max((color.z).powf((1.0)/(2.2)))) as u8;
+    {
+        let mut image = image.lock().unwrap();
+        image[((i*x + j)*3) as usize] = 255f32.min(0f32.max((color.x).powf((1.0)/(2.2)))) as u8;
+        image[((i*x + j)*3 + 1) as usize] = 255f32.min(0f32.max((color.y).powf((1.0)/(2.2)))) as u8;
+        image[((i*x + j)*3 + 2) as usize] = 255f32.min(0f32.max((color.z).powf((1.0)/(2.2)))) as u8;
+    }
 
 }
 

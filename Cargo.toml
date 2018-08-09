@@ -4,5 +4,6 @@ version = "0.1.0"
 authors = ["Donatien <donatien@odena.eu>"]
 
 [dependencies]
+rayon = "1.0.2"
 rand = "*"
 time = "0.1"
