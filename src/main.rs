@@ -68,13 +68,13 @@ struct Scene {
     intensite_lumiere: f32,
 }
 
-impl Add for Vector {
-    type Output = Vector;
+// impl Add for Vector {
+//     type Output = Vector;
 
-    fn add(self, other: Vector) -> Vector {
-        Vector { x: self.x + other.x, y: self.y + other.y, z: self.z + other.z }
-    }
-}
+//     fn add(self, other: Vector) -> Vector {
+//         Vector { x: self.x + other.x, y: self.y + other.y, z: self.z + other.z }
+//     }
+// }
 
 impl AddAssign for Vector {
     fn add_assign(&mut self, other: Vector) {
@@ -86,42 +86,63 @@ impl AddAssign for Vector {
     }
 }
 
-impl Sub for Vector {
-    type Output = Vector;
+// impl Sub for Vector {
+//     type Output = Vector;
 
-    fn sub(self, other: Vector) -> Vector {
-        Vector { x: self.x - other.x, y: self.y - other.y, z: self.z - other.z }
-    }
-}
+//     fn sub(self, other: Vector) -> Vector {
+//         Vector { x: self.x - other.x, y: self.y - other.y, z: self.z - other.z }
+//     }
+// }
 
-impl Mul<f32> for Vector {
-    type Output = Vector;
+// impl Mul<f32> for Vector {
+//     type Output = Vector;
 
-    fn mul(self, scalar: f32) -> Vector {
-        Vector { x: scalar*self.x, y: scalar*self.y, z: scalar*self.z}
-    }
-}
+//     fn mul(self, scalar: f32) -> Vector {
+//         Vector { x: scalar*self.x, y: scalar*self.y, z: scalar*self.z}
+//     }
+// }
 
-impl Mul<Vector> for Vector {
-    type Output = Vector;
+// impl Mul<Vector> for Vector {
+//     type Output = Vector;
 
-    fn mul(self, other: Vector) -> Vector {
-        Vector { x: other.x*self.x, y: other.y*self.y, z: other.z*self.z}
-    }
-}
+//     fn mul(self, other: Vector) -> Vector {
+//         Vector { x: other.x*self.x, y: other.y*self.y, z: other.z*self.z}
+//     }
+// }
 
-impl Div<f32> for Vector {
-    type Output = Vector;
+// impl Div<f32> for Vector {
+//     type Output = Vector;
 
-    fn div(self, scalar: f32) -> Vector {
-        Vector { x: self.x/scalar, y: self.y/scalar, z: self.z/scalar}
-    }
-}
+//     fn div(self, scalar: f32) -> Vector {
+//         Vector { x: self.x/scalar, y: self.y/scalar, z: self.z/scalar}
+//     }
+// }
 
 impl Vector {
     fn new() -> Vector {
         Vector {x: 0.0, y: 0.0, z: 0.0}
     }
+
+    fn add(&self, other: &Vector) -> Vector {
+        Vector { x: self.x + other.x, y: self.y + other.y, z: self.z + other.z }
+    }
+
+    fn sub(&self, other: &Vector) -> Vector {
+        Vector { x: self.x - other.x, y: self.y - other.y, z: self.z - other.z }
+    }
+
+    fn fmul(&self, scalar: f32) -> Vector {
+        Vector { x: scalar*self.x, y: scalar*self.y, z: scalar*self.z}
+    }
+
+    fn mul(&self, other: &Vector) -> Vector {
+        Vector { x: other.x*self.x, y: other.y*self.y, z: other.z*self.z}
+    }
+
+    fn div(&self, scalar: f32) -> Vector {
+        Vector { x: self.x/scalar, y: self.y/scalar, z: self.z/scalar}
+    }
+
     fn dot(&self, other: &Vector) -> f32 {
         self.x*other.x + self.y*other.y + self.z*other.z
     }
@@ -170,9 +191,9 @@ impl Vector {
         };
         let tangent1 = self.clone().cross(&aleatoire);
         let tangent2 = tangent1.cross(&self.clone());
-        let direction_aleatoire = self.clone()*direction_aleatoire_repere_local.z
-            + tangent1.clone()*direction_aleatoire_repere_local.x
-            + tangent2.clone()*direction_aleatoire_repere_local.y;
+        let direction_aleatoire = self.fmul(direction_aleatoire_repere_local.z)
+            .add(&tangent1.fmul(direction_aleatoire_repere_local.x))
+            .add(&tangent2.fmul(direction_aleatoire_repere_local.y));
         direction_aleatoire
     }
 }
@@ -181,7 +202,7 @@ impl Shape for Sphere {
     fn intersection(&self, r: &Ray, p: &mut Vector, n: &mut Vector, t: &mut f32) -> bool {
         // résoud a*t^2 + b*t + c = 0
 
-        let diff: Vector = r.orig.clone() - self.orig.clone();
+        let diff: Vector = r.orig.sub(&self.orig);
         let a: f32 = 1.0;
         let b: f32 = 2.0 * r.dest.clone().dot(&diff);
         let c: f32 = diff.get_norm2() - self.radius*self.radius;
@@ -201,11 +222,11 @@ impl Shape for Sphere {
                     *t = t2;
                 }
 
-                let _p = r.orig.clone() + r.dest.clone()* *t;
+                let _p = r.orig.add(&r.dest.fmul(*t));
                 p.x = _p.x;
                 p.y = _p.y;
                 p.z = _p.z;
-                let normale = (_p - self.orig.clone()).get_normalized();
+                let normale = _p.sub(&self.orig).get_normalized();
                 n.x = normale.x;
                 n.y = normale.y;
                 n.z = normale.z;
@@ -238,15 +259,15 @@ impl Shape for Sphere {
 
 impl Shape for Triangle {
     fn intersection(&self, r: &Ray, p: &mut Vector, n: &mut Vector, t: &mut f32) -> bool {
-        let n_tmp = (self.B.clone() - self.A.clone()).cross(&(self.C.clone() - self.A.clone())).get_normalized();
-        let t_tmp = (self.C.clone() - r.orig.clone()).dot(&n.clone()) / r.dest.clone().dot(&n.clone());
+        let n_tmp = self.B.sub(&self.A).cross(&self.C.sub(&self.A)).get_normalized();
+        let t_tmp = (self.C.sub(&r.orig)).dot(&n.clone()) / r.dest.clone().dot(&n.clone());
         if t_tmp < 0.0 {
             return false;
         }
-        let p_tmp = r.orig.clone() + r.dest.clone()*t_tmp;
-        let u = self.B.clone() - self.A.clone();
-        let v = self.C.clone() - self.A.clone();
-        let w = p.clone() - self.A.clone();
+        let p_tmp = r.orig.add(&r.dest.fmul(t_tmp));
+        let u = self.B.sub(&self.A);
+        let v = self.C.sub(&self.A);
+        let w = p.sub(&self.A);
 
         let m11 = u.get_norm2();
         let m12 = u.clone().dot(&v.clone());
@@ -419,11 +440,11 @@ fn fill_image( i: i32, j: i32, scene: &Scene, n_rays: u16, n_rebonds: u8, x: i32
         direction.normalize();
 
 
-        let destination = position_camera.clone() + direction * focus_distance;
-        let new_origin = position_camera.clone() + Vector { x: dx_aperture, y: dy_aperture, z: 0.0};
-        let r = Ray { orig: new_origin.clone(), dest: (destination.clone() - new_origin.clone()).get_normalized() };
+        let destination = position_camera.add(&direction.fmul(focus_distance));
+        let new_origin = position_camera.add(&Vector { x: dx_aperture, y: dy_aperture, z: 0.0});
+        let r = Ray { orig: new_origin.clone(), dest: (destination.sub(&new_origin)).get_normalized() };
 
-        color += get_color( &r, &scene, n_rebonds, true )/(n_rays as f32);
+        color += get_color( &r, &scene, n_rebonds, true ).div(n_rays as f32);
     }
 
     {
@@ -451,15 +472,15 @@ fn get_color(r: &Ray, scene: &Scene, nbrebonds: u8, show_lights: bool) -> Vector
     if scene.intersection(&r, &mut p, &mut n, &mut id, &mut t) {
 
         if id == scene.lumiere {
-            let intensite_pixel = if show_lights { scene.shapes[scene.lumiere].albedo().clone()*scene.intensite_lumiere } else { Vector::new() };
+            let intensite_pixel = if show_lights { scene.shapes[scene.lumiere].albedo().fmul(scene.intensite_lumiere) } else { Vector::new() };
             return intensite_pixel;
         } else {
 
             if scene.shapes[id].miroir() {
 
-                let direction_miroir = r.dest.clone() - n.clone()*n.clone().dot(&r.dest.clone())*2.0;
-                let rayon_miroir = Ray { orig: p + n*0.001, dest: direction_miroir };
-                intensite_pixel = get_color( &rayon_miroir, &scene, nbrebonds -1, show_lights );
+                let direction_miroir = r.dest.sub(&n.fmul(n.dot(&r.dest)*2.0));
+                let rayon_miroir = Ray { orig: p.add(&n.fmul(0.001)), dest: direction_miroir };
+                intensite_pixel = get_color( &rayon_miroir, &scene, nbrebonds - 1, show_lights );
                 return intensite_pixel;
 
             } else {
@@ -474,7 +495,7 @@ fn get_color(r: &Ray, scene: &Scene, nbrebonds: u8, show_lights: bool) -> Vector
 
                         n1 = 1.3;
                         n2 = 1.0;
-                        normale_pour_transparence = Vector { x: 0.0, y: 0.0, z: 0.0 } - n.clone();
+                        normale_pour_transparence = (Vector { x: 0.0, y: 0.0, z: 0.0 }).sub(&n);
 
                     } else {
 
@@ -485,13 +506,13 @@ fn get_color(r: &Ray, scene: &Scene, nbrebonds: u8, show_lights: bool) -> Vector
                     }
 
                     let lhs = (n1/n2)*(n1/n2);
-                    let rhs = 1.0 - normale_pour_transparence.clone().dot(&r.dest)*normale_pour_transparence.clone().dot(&r.dest);
+                    let rhs = 1.0 - normale_pour_transparence.dot(&r.dest) * normale_pour_transparence.dot(&r.dest);
                     let radical = 1.0 - lhs*rhs;
 
                     if radical > 0.0 {
 
-                        let direction_refracte = (r.dest.clone() - normale_pour_transparence.clone()*(r.dest.dot(&normale_pour_transparence.clone())))*(n1/n2) - normale_pour_transparence.clone()*((radical as f64).sqrt() as f32);
-                        let rayon_refracte = Ray { orig: p - normale_pour_transparence.clone()*0.001, dest: direction_refracte };
+                        let direction_refracte = ((r.dest.clone().sub(&normale_pour_transparence.fmul(r.dest.dot(&normale_pour_transparence)))).fmul(n1/n2)).sub(&normale_pour_transparence.fmul((radical as f64).sqrt() as f32));
+                        let rayon_refracte = Ray { orig: p.sub(&normale_pour_transparence.fmul(0.001)), dest: direction_refracte };
                         intensite_pixel = get_color( &rayon_refracte, &scene, nbrebonds -1, show_lights );
                         return intensite_pixel;
 
@@ -507,16 +528,16 @@ fn get_color(r: &Ray, scene: &Scene, nbrebonds: u8, show_lights: bool) -> Vector
 
                 } else {
 
-                    let axe_op = (p.clone() - scene.shapes[scene.lumiere].orig().clone()).get_normalized();
+                    let axe_op = (p.sub(&scene.shapes[scene.lumiere].orig())).get_normalized();
                     let dir_aleatoire = axe_op.random_cos();
-                    let point_aleatoire = dir_aleatoire.clone() * scene.shapes[scene.lumiere].radius() + scene.shapes[scene.lumiere].orig().clone() ;
-                    let wi = (point_aleatoire.clone() - p.clone()).get_normalized();
-                    let d_light2 = (point_aleatoire.clone() - p.clone()).get_norm2();
+                    let point_aleatoire = dir_aleatoire.fmul(scene.shapes[scene.lumiere].radius()).add(&scene.shapes[scene.lumiere].orig()) ;
+                    let wi = (point_aleatoire.sub(&p)).get_normalized();
+                    let d_light2 = (point_aleatoire.sub(&p)).get_norm2();
                     let np = dir_aleatoire.clone();
 
                     let mut p_light = Vector::new();
                     let mut n_light = Vector::new();
-                    let light_ray = Ray { orig: p.clone() + n.clone()*0.01, dest: wi.clone() };
+                    let light_ray = Ray { orig: p.add(&n.fmul(0.01)), dest: wi.clone() };
                     let mut id_light: usize = 0;
                     let mut t_light: f32 = 1e10;
 
@@ -526,19 +547,19 @@ fn get_color(r: &Ray, scene: &Scene, nbrebonds: u8, show_lights: bool) -> Vector
 
                     } else {
 
-                        let brdf = scene.shapes[id].albedo().clone() / PI;
+                        let brdf = scene.shapes[id].albedo().div(PI);
                         let proba = axe_op.dot(&dir_aleatoire) / ( PI * scene.shapes[scene.lumiere].radius() * scene.shapes[scene.lumiere].radius());
-                        let j = 1.0 * np.dot(&(Vector::new() - wi.clone())) / d_light2;
-                        let intensite_pixel =  brdf * scene.intensite_lumiere * 0f32.max(n.clone().dot(&wi.clone())) * j / proba;
+                        let j = 1.0 * np.dot(&(Vector::new().sub(&wi))) / d_light2;
+                        let intensite_pixel =  brdf.fmul(scene.intensite_lumiere * 0f32.max(n.dot(&wi)) * j / proba);
 
                     }
 
 
                     // Contribution de l'éclairage indirect
                     let direction_aleatoire = n.random_cos();
-                    let rayon_aleatoire = Ray { orig: p + n*0.001, dest: direction_aleatoire };
+                    let rayon_aleatoire = Ray { orig: p.add(&n.fmul(0.001)), dest: direction_aleatoire };
                     let albedo_local = scene.shapes[id].albedo().clone();
-                    let color = get_color( &rayon_aleatoire, &scene, nbrebonds -1, true )*albedo_local;
+                    let color = get_color( &rayon_aleatoire, &scene, nbrebonds -1, true ).mul(&albedo_local);
                     intensite_pixel += color;
                     return intensite_pixel;
                 }
