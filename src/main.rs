@@ -4,17 +4,13 @@ extern crate time;
 
 use std::fs::File;
 use std::io::prelude::*;
-use std::ops::Add;
 use std::ops::AddAssign;
-use std::ops::Sub;
-use std::ops::Mul;
-use std::ops::Div;
 use std::sync::Arc;
 use std::sync::Mutex;
 use rayon::prelude::*;
 use std::f32::consts::PI;
-// use rand::Rng;
-use rand::distributions::{IndependentSample, Range};
+use rand::distributions::Uniform;
+use rand::{thread_rng, Rng};
 
 #[derive(Debug, Clone)]
 struct Vector {
@@ -68,14 +64,6 @@ struct Scene {
     intensite_lumiere: f32,
 }
 
-// impl Add for Vector {
-//     type Output = Vector;
-
-//     fn add(self, other: Vector) -> Vector {
-//         Vector { x: self.x + other.x, y: self.y + other.y, z: self.z + other.z }
-//     }
-// }
-
 impl AddAssign for Vector {
     fn add_assign(&mut self, other: Vector) {
         *self = Vector {
@@ -85,38 +73,6 @@ impl AddAssign for Vector {
         };
     }
 }
-
-// impl Sub for Vector {
-//     type Output = Vector;
-
-//     fn sub(self, other: Vector) -> Vector {
-//         Vector { x: self.x - other.x, y: self.y - other.y, z: self.z - other.z }
-//     }
-// }
-
-// impl Mul<f32> for Vector {
-//     type Output = Vector;
-
-//     fn mul(self, scalar: f32) -> Vector {
-//         Vector { x: scalar*self.x, y: scalar*self.y, z: scalar*self.z}
-//     }
-// }
-
-// impl Mul<Vector> for Vector {
-//     type Output = Vector;
-
-//     fn mul(self, other: Vector) -> Vector {
-//         Vector { x: other.x*self.x, y: other.y*self.y, z: other.z*self.z}
-//     }
-// }
-
-// impl Div<f32> for Vector {
-//     type Output = Vector;
-
-//     fn div(self, scalar: f32) -> Vector {
-//         Vector { x: self.x/scalar, y: self.y/scalar, z: self.z/scalar}
-//     }
-// }
 
 impl Vector {
     fn new() -> Vector {
@@ -175,19 +131,19 @@ impl Vector {
 
     fn random_cos(&self) -> Vector {
         // Contribution de l'éclairage indirect
-        let range = Range::new(0.0, 1.0);
-        let mut rng = rand::thread_rng();
-        let r1: f32 = range.ind_sample(&mut rng);
-        let r2: f32 = range.ind_sample(&mut rng);
+        let range = Uniform::new(0.0, 1.0);
+        // let mut rng = rand::thread_rng();
+        let r1: f32 = thread_rng().sample(range);
+        let r2: f32 = thread_rng().sample(range);
         let direction_aleatoire_repere_local = Vector {
             x: (2.0*PI*r1).cos()*(((1.0-r2) as f64).sqrt() as f32),
             y: (2.0*PI*r1).sin()*(((1.0-r2) as f64).sqrt() as f32),
             z: (r2 as f64).sqrt() as f32,
         };
         let aleatoire = Vector {
-            x: range.ind_sample(&mut rng),
-            y: range.ind_sample(&mut rng),
-            z: range.ind_sample(&mut rng),
+            x: thread_rng().sample(range),
+            y: thread_rng().sample(range),
+            z: thread_rng().sample(range),
         };
         let tangent1 = self.clone().cross(&aleatoire);
         let tangent2 = tangent1.cross(&self.clone());
@@ -260,14 +216,14 @@ impl Shape for Sphere {
 impl Shape for Triangle {
     fn intersection(&self, r: &Ray, p: &mut Vector, n: &mut Vector, t: &mut f32) -> bool {
         let n_tmp = self.B.sub(&self.A).cross(&self.C.sub(&self.A)).get_normalized();
-        let t_tmp = (self.C.sub(&r.orig)).dot(&n.clone()) / r.dest.clone().dot(&n.clone());
+        let t_tmp = (self.C.sub(&r.orig)).dot(&n_tmp.clone()) / r.dest.clone().dot(&n_tmp.clone());
         if t_tmp < 0.0 {
             return false;
         }
         let p_tmp = r.orig.add(&r.dest.fmul(t_tmp));
         let u = self.B.sub(&self.A);
         let v = self.C.sub(&self.A);
-        let w = p.sub(&self.A);
+        let w = p_tmp.sub(&self.A);
 
         let m11 = u.get_norm2();
         let m12 = u.clone().dot(&v.clone());
@@ -279,21 +235,22 @@ impl Shape for Triangle {
         let detb = b11 * m22 - b21 * m12;
         let beta = detb / detm;
 
+        if beta < 0. || beta > 1. {
+            return false;
+        }
+
         let g12 = b11;
         let g22 = b21;
         let detg = m11 * g22 - g12 * m12;
         let gamma = detg / detm;
 
+        if gamma < 0. || gamma > 1. {
+            return false;
+        }
+
         let alpha = 1. - beta - gamma;
 
-        // TODO: déplacer les conditions juste après les calculs des det et voir l'impact sur les perfs
         if alpha < 0. || alpha > 1. {
-            return false;
-        }
-        if beta < 0. || beta > 1. {
-            return false;
-        }
-        if gamma < 0. || gamma > 1. {
             return false;
         }
         if alpha + beta + gamma > 1. {
@@ -301,9 +258,11 @@ impl Shape for Triangle {
         }
 
         *t = t_tmp;
+
         p.x = p_tmp.x;
         p.y = p_tmp.y;
         p.z = p_tmp.z;
+
         n.x = n_tmp.x;
         n.y = n_tmp.y;
         n.z = n_tmp.z;
@@ -336,11 +295,12 @@ impl Scene {
     fn add_sphere(&mut self, sphere: Sphere) {
         self.shapes.push(Box::new(sphere));
     }
+
     fn add_triangle(&mut self, triangle: Triangle) {
         self.shapes.push(Box::new(triangle));
     }
 
-    fn intersection(&self, r: &Ray, p: &mut Vector, n: &mut Vector, sphere_id: &mut usize, min_t: &mut f32) -> bool {
+    fn intersection(&self, r: &Ray, p: &mut Vector, n: &mut Vector, id: &mut usize, min_t: &mut f32) -> bool {
         let mut has_inter: bool = false;
         *min_t = 1e10;
 
@@ -355,7 +315,7 @@ impl Scene {
                     *min_t = t;
                     *p = local_p.clone();
                     *n = local_n.clone();
-                    *sphere_id = i;
+                    *id = i;
                 }
             }
         }
@@ -366,20 +326,23 @@ impl Scene {
 }
 
 fn main() {
-    let time_start = time::now().tm_sec;
-    let time_start_min = time::now().tm_min;
+
+    // Scene global settings
     const X: i32 = 800;
     const Y: i32 = 800;
     const NRAYS: u16 = 600;
-    const NBOUNCES: u8 = 5;
+    const NBOUNCES: u8 = 3;
+    let focus_distance = 60.0;
     const FOV: f32 = 60.0*PI/180.0;
-
     let mut image = vec![0u8; (X*Y*3) as usize];
+
+    // Camera an light settings
     let position_lumiere = Vector { x: 15.0, y: 70.0, z: -30.0};
     let intensite_lumiere = 1000000000.0 * 4.0 * PI / ( 4.0 * PI * 30.0 * 30.0 * PI);
     let position_camera = Vector::new();
-    let focus_distance = 60.0;
 
+
+    // Scene objects creation
     let slum = Sphere { orig: position_lumiere, radius: 15.0, albedo: Vector { x: 1.0, y: 1.0, z: 1.0 }, miroir: false, transp: false };
     let s1 = Sphere { orig: Vector { x: 0.0, y: 0.0, z: -55.0 }, radius: 10.0, albedo: Vector { x: 1.0, y: 0.0, z: 1.0 }, miroir: false, transp: false };
     let s1bis = Sphere { orig: Vector { x: -15.0, y: 0.0, z: -35.0 }, radius: 10.0, albedo: Vector { x: 1.0, y: 0.0, z: 0.0 }, miroir: false, transp: true };
@@ -389,7 +352,7 @@ fn main() {
     let s4 = Sphere { orig: Vector { x: -2050.0, y: 0.0, z: 0.0 }, radius: 2000.0, albedo: Vector { x: 0.0, y: 1.0, z: 0.0 }, miroir: false, transp: false }; // left wall
     let s5 = Sphere { orig: Vector { x: 2050.0, y: 0.0, z: 0.0 }, radius: 2000.0, albedo: Vector { x: 0.0, y: 0.0, z: 1.0 }, miroir: false, transp: false }; // right wall
     let s6 = Sphere { orig: Vector { x: 0.0, y: 0.0, z: -2100.0 }, radius: 2000.0, albedo: Vector { x: 0.0, y: 1.0, z: 1.0 }, miroir: false, transp: false }; // back wall
-    let tri = Triangle { A: Vector { x: -10., y: -10., z: -20.}, B: Vector { x: 10., y: -10., z: -20.}, C: Vector { x: 0., y: 10., z: -20.}, albedo: Vector {x: 1., y: 0., z: 0.}, miroir: false, transp: false };
+    let tri = Triangle { A: Vector { x: -10., y: -10., z: -35.}, B: Vector { x: 10., y: -10., z: -80.}, C: Vector { x: 0., y: 10., z: -80.}, albedo: Vector {x: 0., y: 1., z: 0.}, miroir: false, transp: false };
 
     let mut scene = Scene { shapes: Vec::new(), lumiere: 0, intensite_lumiere: intensite_lumiere };
     scene.add_sphere(slum);
@@ -403,34 +366,40 @@ fn main() {
     scene.add_sphere(s4);
     scene.add_sphere(s5);
     scene.add_sphere(s6);
-    let arc_image = Arc::new(Mutex::new(image));
 
+    let arc_image = Arc::new(Mutex::new(image)); // Image is stored is an arc mutex for mutli-threaded rendering
+
+    // Redering pixel by pixel
     for i in 0..Y {
             (0..X).into_par_iter()
                 .for_each(|j| fill_image(i, j, &scene, NRAYS, NBOUNCES, X, Y, FOV, &position_camera, focus_distance, Arc::clone(&arc_image)));
     }
 
-
+    // Saving result
     let image = arc_image.lock().unwrap();
     save_img("./image.bmp", &image, X as u32, Y as u32);
 }
 
 fn fill_image( i: i32, j: i32, scene: &Scene, n_rays: u16, n_rebonds: u8, x: i32, y: i32, fov: f32, position_camera: &Vector, focus_distance: f32, image: Arc<Mutex<Vec<u8>>>) {
+
     let mut color = Vector::new();
-    for n in 0..n_rays {
 
-        // Methode de box Muller
-        let range = Range::new(0.0, 1.0);
-        let mut rng = rand::thread_rng();
-        let r1: f32 = range.ind_sample(&mut rng);
-        let r2: f32 = range.ind_sample(&mut rng);
+    for _n in 0..n_rays {
 
-        let r = (-2.0*r1.log(10.0) as f64).sqrt() as f32;
+        // Box-Muller method
+
+        let range = Uniform::new(0.0, 1.0);
+        // let mut rng = rand::thread_rng();
+        let r1: f32 = thread_rng().sample(range);
+        let r2: f32 = thread_rng().sample(range);
+
+        // let r = (-2.0*r1.log(10.0) as f64).sqrt() as f32;
+        let r = (-2.0*r1.ln() as f64).sqrt() as f32; // I used log10, but it seems Box-Muller method uses ln
         let dx = r*(2.0*PI*r2).cos();
         let dy = r*(2.0*PI*r2).sin();
 
-        let dx_aperture = (range.ind_sample(&mut rng) - 0.5) * 5.0;
-        let dy_aperture = (range.ind_sample(&mut rng) - 0.5) * 5.0;
+        let dx_aperture = (thread_rng().sample(range) - 0.5) * 5.0;
+        let dy_aperture = (thread_rng().sample(range) - 0.5) * 5.0;
 
         let mut direction = Vector {
             x: j as f32 - x as f32/2.0 + 0.5 + dx,
@@ -558,8 +527,8 @@ fn get_color(r: &Ray, scene: &Scene, nbrebonds: u8, show_lights: bool) -> Vector
                     // Contribution de l'éclairage indirect
                     let direction_aleatoire = n.random_cos();
                     let rayon_aleatoire = Ray { orig: p.add(&n.fmul(0.001)), dest: direction_aleatoire };
-                    let albedo_local = scene.shapes[id].albedo().clone();
-                    let color = get_color( &rayon_aleatoire, &scene, nbrebonds -1, true ).mul(&albedo_local);
+                    let albedo_local = &scene.shapes[id].albedo();
+                    let color = get_color( &rayon_aleatoire, &scene, nbrebonds -1, true ).mul(albedo_local);
                     intensite_pixel += color;
                     return intensite_pixel;
                 }
